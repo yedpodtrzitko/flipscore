@@ -41,7 +41,12 @@ func GetScoreListRoute(res http.ResponseWriter, req *http.Request) {
 	scoreBytes, _ := json.Marshal(&scores)
 	scoreJson := string(scoreBytes[:])
 
+	res.Header().Set("Content-Type", "application/json")
 	fmt.Fprintf(res, scoreJson)
+}
+
+func GetIndex(res http.ResponseWriter, req *http.Request) {
+	fmt.Fprintf(res, "ok")
 }
 
 func main() {
@@ -64,5 +69,6 @@ func main() {
 
 	http.HandleFunc("/save", SaveScoreRoute)
 	http.HandleFunc("/list", GetScoreListRoute)
+	http.HandleFunc("/", GetIndex)
 	http.ListenAndServe(fmt.Sprint(":", serverPort), nil)
 }
