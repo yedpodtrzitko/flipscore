@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"./misc"
+	"encoding/json"
 )
 
 func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
@@ -12,8 +13,8 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	var signedScore = req.FormValue("score")
-	var extractedData = misc.ExtractJWTData(signedScore)
+	signedScore := req.FormValue("score")
+	extractedData := misc.ExtractJWTData(signedScore)
 
 	if extractedData == nil {
 		fmt.Fprintf(res, "signature check failed")
@@ -31,10 +32,11 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 }
 
 func GetScoreListRoute(res http.ResponseWriter, req *http.Request) {
-	// TODO
-	//var scores = misc.GetScoreList()
+	scores := misc.GetScoreList()
+	scoreBytes, _ := json.Marshal(&scores)
+	scoreJson := string(scoreBytes[:])
 
-	fmt.Fprintf(res, "[{}]")
+	fmt.Fprintf(res, scoreJson)
 }
 
 func main() {

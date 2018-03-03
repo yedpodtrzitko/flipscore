@@ -3,19 +3,19 @@ package misc
 import (
 	"upper.io/db.v3/postgresql"
 	"time"
-	//"github.com/robbert229/jwt"
 	"github.com/henderjon/jwt"
 	"upper.io/db.v3"
 	"log"
+	"os"
 )
 
-var jwtSecret = "secret" // TODO - env variable
+var jwtSecret = os.Getenv("JWT_KEY")
 
 var dbSettings = postgresql.ConnectionURL{
-	Database: "flipscore",
-	Host:     "localhost",
-	User:     "yed",
-	Password: "", // TODO - env var
+	Database: os.Getenv("DB_NAME"),
+	Host:     os.Getenv("DB_HOST"),
+	User:     os.Getenv("DB_USER"),
+	Password: os.Getenv("DB_PASS"),
 }
 
 type ScoreDBRecord struct {
@@ -36,14 +36,14 @@ func SaveScoreDB(scoreData *jwt.Claims) bool {
 		return false
 	}
 
-	var rawUser, _ = scoreData.Get("player")
+	rawUser, _ := scoreData.Get("player")
 	userStr, ok := rawUser.(string)
 	if !ok {
 		log.Println("failed to get player value")
 		return false
 	}
 
-	var dbItem = ScoreDBRecord{
+	dbItem := ScoreDBRecord{
 		Score:  int(scoreInt),
 		Player: userStr,
 		Date:   time.Now(),
