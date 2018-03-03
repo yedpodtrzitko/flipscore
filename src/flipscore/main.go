@@ -5,7 +5,12 @@ import (
 	"net/http"
 	"./misc"
 	"encoding/json"
+	"os"
+	"log"
 )
+
+var jwtSecret = os.Getenv("JWT_KEY")
+
 
 func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
@@ -14,7 +19,7 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 	}
 
 	signedScore := req.FormValue("score")
-	extractedData := misc.ExtractJWTData(signedScore)
+	extractedData := misc.ExtractJWTData(jwtSecret, signedScore)
 
 	if extractedData == nil {
 		fmt.Fprintf(res, "signature check failed")
@@ -40,7 +45,24 @@ func GetScoreListRoute(res http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	if jwtSecret == "" {
+		log.Print("JWT_KEY not defined")
+		os.Exit(1)
+	}
+
+	serverPort := os.Getenv("SERVER_PORT")
+	if len(serverPort) == 0 {
+		serverPort = "4980"
+	}
+
+	if !misc.TestDBConnection() {
+		log.Print("wrong DB configuration")
+		os.Exit(1)
+	}
+
+	log.Println("serving on port", serverPort)
+
 	http.HandleFunc("/save", SaveScoreRoute)
 	http.HandleFunc("/list", GetScoreListRoute)
-	http.ListenAndServe(":8080", nil)
+	http.ListenAndServe(fmt.Sprint(":", serverPort), nil)
 }

@@ -6,10 +6,9 @@ import (
 	"github.com/henderjon/jwt"
 	"upper.io/db.v3"
 	"log"
+	//"os"
 	"os"
 )
-
-var jwtSecret = os.Getenv("JWT_KEY")
 
 var dbSettings = postgresql.ConnectionURL{
 	Database: os.Getenv("DB_NAME"),
@@ -19,7 +18,8 @@ var dbSettings = postgresql.ConnectionURL{
 }
 
 type ScoreDBRecord struct {
-	Score  int       `db:"score"`
+	//Id     uint      `db:"id"`
+	Score  uint      `db:"score"`
 	Player string    `db:"player"`
 	Date   time.Time `db:"created_at"`
 }
@@ -44,12 +44,16 @@ func SaveScoreDB(scoreData *jwt.Claims) bool {
 	}
 
 	dbItem := ScoreDBRecord{
-		Score:  int(scoreInt),
+		Score:  uint(scoreInt),
 		Player: userStr,
 		Date:   time.Now(),
 	}
 
-	dbsess := GetSession()
+	dbsess, err := GetDBSession()
+	if err != nil {
+		return false
+	}
+
 	scoreCollection := dbsess.Collection("score")
 	scoreCollection.Insert(dbItem)
 
@@ -58,7 +62,7 @@ func SaveScoreDB(scoreData *jwt.Claims) bool {
 	return true
 }
 
-func ExtractJWTData(token string) *jwt.Claims {
+func ExtractJWTData(jwtSecret string, token string) *jwt.Claims {
 	algorithm := jwt.HmacSha256(jwtSecret)
 
 	err := algorithm.Validate(token)
@@ -77,30 +81,28 @@ func ExtractJWTData(token string) *jwt.Claims {
 	return scoreData
 }
 
-func GetSession() db.Database {
+func GetDBSession() (db.Database, error) {
 	dbSession, err := postgresql.Open(dbSettings)
 	dbSession.SetLogging(true)
-	if err != nil {
-		panic(err)
-	}
-	return dbSession
+	return dbSession, err
 }
 
 func GetScoreList() []ScoreDBRecord {
-
-	dbsess := GetSession()
-
 	var scores []ScoreDBRecord
 
+	dbsess, err := GetDBSession()
+	if err != nil {
+		return scores
+	}
 	res := dbsess.Collection("score").Find()
 	res = res.OrderBy("-score").Limit(5)
-
-	err := res.All(&scores)
+	res.All(&scores)
 	defer dbsess.Close()
 
-	if err != nil {
-		panic(err)
-	}
-
 	return scores
+}
+
+func TestDBConnection() bool {
+	_, err := GetDBSession()
+	return err == nil
 }
