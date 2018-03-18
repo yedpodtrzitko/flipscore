@@ -11,7 +11,6 @@ import (
 
 var jwtSecret = os.Getenv("JWT_KEY")
 
-
 func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
 	if err != nil {
@@ -33,6 +32,10 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// reset redis no_score check
+	misc.RedisScoreExists(true)
+
+	res.WriteHeader(201)
 	fmt.Fprintf(res, "score saved %s", req.URL.Path)
 }
 

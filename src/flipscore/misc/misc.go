@@ -6,8 +6,9 @@ import (
 	"github.com/henderjon/jwt"
 	"upper.io/db.v3"
 	"log"
-	//"os"
 	"os"
+	"fmt"
+	"strconv"
 )
 
 var dbSettings = postgresql.ConnectionURL{
@@ -23,6 +24,8 @@ type ScoreDBRecord struct {
 	Player string    `db:"player"`
 	Date   time.Time `db:"created_at"`
 }
+
+var redisDateFormat = "2006-01-02 15:03:04"
 
 func SaveScoreDB(scoreData *jwt.Claims) bool {
 	rawScore, err := scoreData.Get("score")
@@ -90,6 +93,30 @@ func GetDBSession() (db.Database, error) {
 func GetScoreList() []ScoreDBRecord {
 	var scores []ScoreDBRecord
 
+	redisKeys, err := redisClient.Keys("score_*").Result()
+	// no redis scores saved
+	if len(redisKeys) == 0 {
+		noScores, _ := redisClient.Get("no_score").Result()
+		if noScores != "" {
+			// no scores anywhere
+			return scores
+		}
+	} else {
+		for _, scoreKey := range redisKeys {
+			redisScore := redisClient.HMGet(scoreKey, "Player", "Score", "Date").Val()
+			nativeDate, _ := time.Parse(redisDateFormat, redisScore[2].(string))
+			nativeScore, _ := strconv.ParseUint(redisScore[1].(string),10,64)
+			score := ScoreDBRecord{
+				Player: redisScore[0].(string),
+				Score:  uint(nativeScore),
+				Date:   nativeDate,
+			}
+
+			scores = append(scores, score)
+		}
+		return scores
+	}
+
 	dbsess, err := GetDBSession()
 	if err != nil {
 		return scores
@@ -99,7 +126,28 @@ func GetScoreList() []ScoreDBRecord {
 	res.All(&scores)
 	defer dbsess.Close()
 
+	if len(scores) > 0 {
+		SaveIntoRedis(scores)
+	}
+	RedisScoreExists(len(scores) > 0)
+
 	return scores
+}
+
+func RedisScoreExists(hasScore bool) {
+	if (hasScore) {
+		redisClient.Del("no_score").Result()
+	} else {
+		redisClient.Set("no_score", "1", 0).Result()
+	}
+}
+
+func SaveIntoRedis(scores []ScoreDBRecord) {
+	for idx, score := range scores {
+		redisClient.HSet(fmt.Sprint("score_", idx), "Player", score.Player).Err()
+		redisClient.HSet(fmt.Sprint("score_", idx), "Score", score.Score).Err()
+		redisClient.HSet(fmt.Sprint("score_", idx), "Date", score.Date.Format(redisDateFormat)).Err()
+	}
 }
 
 func TestDBConnection() bool {
