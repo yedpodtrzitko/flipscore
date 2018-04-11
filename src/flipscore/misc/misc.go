@@ -8,6 +8,8 @@ import (
 	"log"
 	"os"
 	"fmt"
+	"strings"
+	//"strconv"
 	"strconv"
 )
 
@@ -33,34 +35,62 @@ func SaveScoreDB(scoreData *jwt.Claims) bool {
 		log.Println("failed to get score value")
 		return false
 	}
-	scoreInt, ok := rawScore.(float64)
+
+	newScore, ok := rawScore.(float64)
 	if !ok {
 		log.Println("failed to convert score int value")
 		return false
 	}
 
+	newScoreUint := uint(newScore)
 	rawUser, _ := scoreData.Get("player")
-	userStr, ok := rawUser.(string)
+	userStrRaw, ok := rawUser.(string)
 	if !ok {
 		log.Println("failed to get player value")
 		return false
 	}
 
-	dbItem := ScoreDBRecord{
-		Score:  uint(scoreInt),
-		Player: userStr,
-		Date:   time.Now(),
-	}
-
+	userStr := strings.TrimSpace(userStrRaw)
 	dbsess, err := GetDBSession()
+	defer dbsess.Close()
+
 	if err != nil {
 		return false
 	}
 
+	var existingRecord ScoreDBRecord
 	scoreCollection := dbsess.Collection("score")
-	scoreCollection.Insert(dbItem)
+	userScoreExists, err := scoreCollection.Find("player", userStr).Count() //One(&existingRecord)
+	if err != nil {
+		return false
+	}
 
-	defer dbsess.Close()
+	if userScoreExists == 0 {
+		newRecord := ScoreDBRecord{
+			Score:  newScoreUint,
+			Player: userStr,
+			Date:   time.Now(),
+		}
+
+		scoreCollection.Insert(newRecord)
+		return true
+	}
+
+	res := scoreCollection.Find("player", userStr)
+	err = res.One(&existingRecord)
+	if err != nil {
+		return false
+	}
+
+	if existingRecord.Score <= newScoreUint {
+		return true
+	}
+
+	existingRecord.Score = newScoreUint
+	err = res.Update(existingRecord)
+	if err != nil {
+		return false
+	}
 
 	return true
 }
@@ -90,11 +120,16 @@ func GetDBSession() (db.Database, error) {
 	return dbSession, err
 }
 
-func GetScoreList() []ScoreDBRecord {
+func GetRedisCache() []ScoreDBRecord {
+	// FIX this function
 	var scores []ScoreDBRecord
 
 	redisKeys, err := redisClient.Keys("score_*").Result()
 	// no redis scores saved
+	if err != nil {
+		return scores
+	}
+
 	if len(redisKeys) == 0 {
 		noScores, _ := redisClient.Get("no_score").Result()
 		if noScores != "" {
@@ -105,7 +140,7 @@ func GetScoreList() []ScoreDBRecord {
 		for _, scoreKey := range redisKeys {
 			redisScore := redisClient.HMGet(scoreKey, "Player", "Score", "Date").Val()
 			nativeDate, _ := time.Parse(redisDateFormat, redisScore[2].(string))
-			nativeScore, _ := strconv.ParseUint(redisScore[1].(string),10,64)
+			nativeScore, _ := strconv.ParseUint(redisScore[1].(string), 10, 64)
 			score := ScoreDBRecord{
 				Player: redisScore[0].(string),
 				Score:  uint(nativeScore),
@@ -114,15 +149,22 @@ func GetScoreList() []ScoreDBRecord {
 
 			scores = append(scores, score)
 		}
-		return scores
 	}
+
+	return scores
+
+}
+
+func GetScoreList() []ScoreDBRecord {
+	var scores []ScoreDBRecord
+	//scores = GetRedisCache()
 
 	dbsess, err := GetDBSession()
 	if err != nil {
 		return scores
 	}
 	res := dbsess.Collection("score").Find()
-	res = res.OrderBy("-score").Limit(5)
+	res = res.OrderBy("score").Limit(5)
 	res.All(&scores)
 	defer dbsess.Close()
 

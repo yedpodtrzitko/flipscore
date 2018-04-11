@@ -1,4 +1,7 @@
 xbuild:
 	GOOS=linux GOARCH=amd64 go build flipscore/main.go
 
-.PHONY: xbuild
+run:
+	go run ./flipscore/main.go
+
+.PHONY: xbuild run

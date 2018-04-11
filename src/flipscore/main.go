@@ -32,8 +32,10 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	//misc.SaveIntoRedis()
+
 	// reset redis no_score check
-	misc.RedisScoreExists(true)
+	//misc.RedisScoreExists(true)
 
 	res.WriteHeader(201)
 	fmt.Fprintf(res, "score saved %s", req.URL.Path)
