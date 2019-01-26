@@ -1,15 +1,14 @@
 package main
 
 import (
-	"fmt"
-	"net/http"
-	"./misc"
 	"encoding/json"
-	"os"
+	"fmt"
 	"log"
-)
+	"net/http"
+	"os"
 
-var jwtSecret = os.Getenv("JWT_KEY")
+	"./misc"
+)
 
 func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 	err := req.ParseForm()
@@ -17,23 +16,29 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	signedScore := req.FormValue("score")
-	extractedData := misc.ExtractJWTData(jwtSecret, signedScore)
+	gameID := req.FormValue("game_id")
+	jwtKey, err := misc.GetGameKey(gameID)
+	if err != nil {
+		fmt.Fprintf(res, "game not found")
+		res.WriteHeader(500)
+		return
+	}
 
+	signedData := req.FormValue("jwt_data")
+	extractedData := misc.Extract(jwtKey, signedData)
 	if extractedData == nil {
-		fmt.Fprintf(res, "signature check failed")
+		fmt.Fprintf(res, "jwt signature check failed")
 		res.WriteHeader(400)
 		return
 	}
 
-	if !misc.SaveScoreDB(extractedData) {
+	if !misc.SaveScore(gameID, extractedData) {
 		fmt.Fprintf(res, "failed to save score")
 		res.WriteHeader(500)
 		return
 	}
 
 	//misc.SaveIntoRedis()
-
 	// reset redis no_score check
 	//misc.RedisScoreExists(true)
 
@@ -42,7 +47,17 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 }
 
 func GetScoreListRoute(res http.ResponseWriter, req *http.Request) {
-	scores := misc.GetScoreList()
+
+	keys, ok := req.URL.Query()["gameID"]
+	if !ok || len(keys[0]) < 1 {
+		fmt.Fprintf(res, "missing gameID parameter")
+		res.WriteHeader(400)
+		return
+	}
+
+	gameID := keys[0]
+
+	scores := misc.GetScoreList(gameID)
 	scoreBytes, _ := json.Marshal(&scores)
 	scoreJson := string(scoreBytes[:])
 
@@ -55,11 +70,6 @@ func GetIndex(res http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	if jwtSecret == "" {
-		log.Print("JWT_KEY not defined")
-		os.Exit(1)
-	}
-
 	serverPort := os.Getenv("SERVER_PORT")
 	if len(serverPort) == 0 {
 		serverPort = "4980"
