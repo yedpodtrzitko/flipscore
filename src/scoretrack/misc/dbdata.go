@@ -30,33 +30,43 @@ type ScoreDBRecord struct {
 }
 
 type GameKeyRecord struct {
-	GameID  string `db:"id"`
-	GameKey string `db:"game_key"`
+	GameID         string `db:"id"`
+	GameKey        string `db:"game_key"`
+	ScoreAscending bool   `db:"score_ascending"`
+	ScoreInterval  uint   `db:"score_interval"`
 }
 
 var redisDateFormat = "2006-01-02 15:03:04"
 
-func GetDBSession() (db.Database, error) {
+func GetDBSession() db.Database {
 	dbSession, err := postgresql.Open(dbSettings)
-	dbSession.SetLogging(true)
-	return dbSession, err
+	if err != nil {
+		fmt.Println(err)
+		return nil
+	}
+
+	if os.Getenv("DB_LOGGING") != "" {
+		dbSession.SetLogging(true)
+		fmt.Println("db logging on")
+	}
+	return dbSession
 }
 
-func GetGameKey(gameID string) (string, error) {
+func GetGameInfo(gameID string) (GameKeyRecord, error) {
 	var existingRecord GameKeyRecord
-	dbsess, err := GetDBSession()
+	dbsess := GetDBSession()
 	defer dbsess.Close()
 
 	keyCollection := dbsess.Collection("game_key")
-	err = keyCollection.Find("id", gameID).One(&existingRecord)
+	err := keyCollection.Find("id", gameID).One(&existingRecord)
 	if err != nil {
-		return "", errors.New("Game Key not found")
+		return existingRecord, errors.New("Game Key not found")
 	}
 
-	return existingRecord.GameKey, nil
+	return existingRecord, nil
 }
 
-func SaveScore(GameID string, scoreData *jwt.Claims) bool {
+func SaveScore(GameInfo GameKeyRecord, scoreData *jwt.Claims) bool {
 	rawScore, err := scoreData.Get("score")
 	if err != nil {
 		log.Println("failed to get score value")
@@ -70,7 +80,7 @@ func SaveScore(GameID string, scoreData *jwt.Claims) bool {
 	}
 
 	rawGameID, err := scoreData.Get("game_id")
-	if GameID != rawGameID {
+	if GameInfo.GameID != rawGameID {
 		log.Println("Game ID value doesnt match")
 		return false
 	}
@@ -88,25 +98,28 @@ func SaveScore(GameID string, scoreData *jwt.Claims) bool {
 	rawContent, _ := scoreData.Get("content")
 	contentStr, ok := rawContent.(string)
 
-	dbsess, err := GetDBSession()
+	dbsess := GetDBSession()
 	defer dbsess.Close()
-	if err != nil {
-		return false
-	}
 
-	var existingRecord ScoreDBRecord
+	var now = time.Now()
 	scoreCollection := dbsess.Collection("score")
-	userScoreExists, err := scoreCollection.Find("player", userStr).And("game_id", GameID).Count() //One(&existingRecord)
+	userScoreExists := scoreCollection.Find("player", userStr).And("game_id", GameInfo.GameID) //.Count() //One(&existingRecord)
+
+	if GameInfo.ScoreInterval == 24 {
+		userScoreExists = userScoreExists.And("created_at", now.Day)
+	}
+
+	exists, err := userScoreExists.Count()
 	if err != nil {
 		return false
 	}
 
-	if userScoreExists == 0 {
+	if exists == 0 {
 		newRecord := ScoreDBRecord{
-			GameID:    GameID,
+			GameID:    GameInfo.GameID,
 			Score:     newScoreUint,
 			Player:    userStr,
-			CreatedAt: time.Now(),
+			CreatedAt: now,
 			Content:   contentStr,
 		}
 
@@ -119,24 +132,25 @@ func SaveScore(GameID string, scoreData *jwt.Claims) bool {
 		return true
 	}
 
-	res := scoreCollection.Find("player", userStr).And("game_id", GameID)
-	err = res.One(&existingRecord)
+	//res := scoreCollection.Find("player", userStr).And("game_id", GameID)
+	//err = res.One(&existingRecord)
+	var existingRecord ScoreDBRecord
+	err = userScoreExists.One(&existingRecord)
 	if err != nil {
 		return false
 	}
 
-	if existingRecord.Score > newScoreUint {
+	if GameInfo.ScoreAscending && existingRecord.Score > newScoreUint {
+		return true
+	} else if !GameInfo.ScoreAscending && existingRecord.Score < newScoreUint {
 		return true
 	}
 
 	existingRecord.Score = newScoreUint
 	existingRecord.Content = contentStr
-	err = res.Update(existingRecord)
-	if err != nil {
-		return false
-	}
-
-	return true
+	existingRecord.CreatedAt = now
+	err = userScoreExists.Update(existingRecord)
+	return err != nil
 }
 
 func GetRedisCache() []ScoreDBRecord {
@@ -177,10 +191,7 @@ func GetScoreList(gameID string) []ScoreDBRecord {
 	var scores []ScoreDBRecord
 	//scores = GetRedisCache()
 
-	dbsess, err := GetDBSession()
-	if err != nil {
-		return scores
-	}
+	dbsess := GetDBSession()
 	defer dbsess.Close()
 
 	res := dbsess.Collection("score").Find("game_id", gameID)
@@ -198,6 +209,7 @@ func GetScoreList(gameID string) []ScoreDBRecord {
 }
 
 func TestDBConnection() bool {
-	_, err := GetDBSession()
-	return err == nil
+	conn := GetDBSession()
+	defer conn.Close()
+	return conn != nil
 }

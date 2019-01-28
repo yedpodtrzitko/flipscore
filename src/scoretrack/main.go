@@ -17,7 +17,7 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 	}
 
 	gameID := req.FormValue("game_id")
-	jwtKey, err := misc.GetGameKey(gameID)
+	gameInfo, err := misc.GetGameInfo(gameID)
 	if err != nil {
 		fmt.Fprintf(res, "game not found")
 		res.WriteHeader(500)
@@ -25,14 +25,14 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 	}
 
 	signedData := req.FormValue("jwt_data")
-	extractedData := misc.Extract(jwtKey, signedData)
+	extractedData := misc.Extract(gameInfo.GameKey, signedData)
 	if extractedData == nil {
 		fmt.Fprintf(res, "jwt signature check failed")
 		res.WriteHeader(400)
 		return
 	}
 
-	if !misc.SaveScore(gameID, extractedData) {
+	if !misc.SaveScore(gameInfo, extractedData) {
 		fmt.Fprintf(res, "failed to save score")
 		res.WriteHeader(500)
 		return
