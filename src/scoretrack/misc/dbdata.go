@@ -88,7 +88,7 @@ func SaveScore(GameInfo GameKeyRecord, scoreData *jwt.Claims) bool {
 	newScoreUint := uint(newScore)
 	rawUser, _ := scoreData.Get("player")
 	userStr, ok := rawUser.(string)
-	if !ok {
+	if !ok || len(userStr) < 2 {
 		log.Println("failed to get player name")
 		return false
 	} else {
@@ -123,8 +123,7 @@ func SaveScore(GameInfo GameKeyRecord, scoreData *jwt.Claims) bool {
 			Content:   contentStr,
 		}
 
-		inserted, err := scoreCollection.Insert(newRecord)
-		fmt.Println(inserted)
+		_, err := scoreCollection.Insert(newRecord)
 		if err != nil {
 			fmt.Println("err on insert")
 			return false

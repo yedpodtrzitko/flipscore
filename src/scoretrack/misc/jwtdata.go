@@ -6,19 +6,20 @@ import (
 	"github.com/henderjon/jwt"
 )
 
-func Extract(jwtKey string, jwtData string) *jwt.Claims {
+func ExtractJWT(jwtKey string, jwtData string) *jwt.Claims {
 	algorithm := jwt.HmacSha256(jwtKey)
-
 	err := algorithm.Validate(jwtData)
 	if err != nil {
-		log.Print("jwt not valid")
-		panic(err)
+		log.Println(err)
+		log.Println("jwt not valid")
+		return nil
 	}
 
 	scoreData, err := algorithm.Decode(jwtData)
 	if err != nil {
-		log.Print("jwt not decoded")
-		panic(err)
+		log.Println(err)
+		log.Println("jwt not decoded")
+		return nil
 	}
 
 	return scoreData
