@@ -102,11 +102,12 @@ func SaveScore(GameInfo GameKeyRecord, scoreData *jwt.Claims) bool {
 	defer dbsess.Close()
 
 	var now = time.Now()
+	dateStr := now.Format("2006-01-02")
 	scoreCollection := dbsess.Collection("score")
-	userScoreExists := scoreCollection.Find("player", userStr).And("game_id", GameInfo.GameID) //.Count() //One(&existingRecord)
+	userScoreExists := scoreCollection.Find("player", userStr).And("game_id", GameInfo.GameID)
 
 	if GameInfo.ScoreInterval == 24 {
-		userScoreExists = userScoreExists.And("created_at", now.Day)
+		userScoreExists = userScoreExists.And(db.Raw("CAST(created_at as date) = ?", dateStr))
 	}
 
 	exists, err := userScoreExists.Count()
@@ -139,9 +140,9 @@ func SaveScore(GameInfo GameKeyRecord, scoreData *jwt.Claims) bool {
 		return false
 	}
 
-	if GameInfo.ScoreAscending && existingRecord.Score > newScoreUint {
+	if GameInfo.ScoreAscending && existingRecord.Score >= newScoreUint {
 		return true
-	} else if !GameInfo.ScoreAscending && existingRecord.Score < newScoreUint {
+	} else if !GameInfo.ScoreAscending && existingRecord.Score <= newScoreUint {
 		return true
 	}
 
