@@ -48,7 +48,6 @@ func SaveScoreRoute(res http.ResponseWriter, req *http.Request) {
 }
 
 func GetScoreListRoute(res http.ResponseWriter, req *http.Request) {
-
 	keys, ok := req.URL.Query()["gameID"]
 	if !ok || len(keys[0]) < 1 {
 		fmt.Fprintf(res, "missing gameID parameter")
@@ -56,9 +55,7 @@ func GetScoreListRoute(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	gameID := keys[0]
-
-	scores := misc.GetScoreList(gameID)
+	scores := misc.GetScoreList(keys[0])
 	scoreBytes, _ := json.Marshal(&scores)
 	scoreJson := string(scoreBytes[:])
 

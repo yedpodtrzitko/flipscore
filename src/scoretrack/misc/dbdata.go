@@ -194,8 +194,17 @@ func GetScoreList(gameID string) []ScoreDBRecord {
 	dbsess := GetDBSession()
 	defer dbsess.Close()
 
+	gameInfo, err := GetGameInfo(gameID)
+	if err != nil {
+		return scores
+	}
+
+	orderCond := "-score"
+	if gameInfo.ScoreAscending {
+		orderCond = "score"
+	}
 	res := dbsess.Collection("score").Find("game_id", gameID)
-	res = res.OrderBy("score").Limit(5)
+	res = res.OrderBy(orderCond).Limit(5)
 	res.All(&scores)
 
 	/*
